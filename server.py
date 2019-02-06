@@ -1,6 +1,7 @@
 import os
 
 from flask import Flask
+from flask_pymongo import PyMongo
 app = Flask(__name__)
 
 os.environ['FLASK_DEBUG'] = "1" # DO NOT USE IN PRODUCTION
