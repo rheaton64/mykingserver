@@ -1,4 +1,5 @@
 import os
+import csv
 
 from flask import Flask
 from flask_pymongo import PyMongo
@@ -59,6 +60,18 @@ def getDay():
 # reHashes a token back into a student ID
 def getIDFromToken(token):
     return token
+
+# compiles data, may or may not be needed
+def compileData(filepath, type):
+    if type == "sch":
+        return None
+    if type == "ass":
+        with open('filepath', mode = 'r') as csv_file:
+            csv_reader = csv.DictReader(csv_file)
+            line_count = 0
+            return None # finish this, working on it in another file
+
+
 
 if __name__ == '__main__':
     app.run()
