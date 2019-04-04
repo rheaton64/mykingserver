@@ -1,10 +1,21 @@
 import os
 import csv
+import datetime
 
 from flask import Flask, jsonify
 from flask import request
 from flask_pymongo import PyMongo
 
+#The absolute motherload of code, the big kahuna, the behemoth
+#MyKingApp backend dataserver
+#Everything is here is needed for the app to function properly, and it all has a function, even though it might not seem like it
+#Uses Flask, a webserver microframework, as well as Flask-PyMongo to interface with the MongoDB server on the same machine
+#Current port used: 5000
+#Current Mongo port: 27017
+#Written by Ryan Heaton, 2019
+
+#Sets up the config for interface with MongoDB
+#Not sure which of these are actually necessary, but keeping them nonetheless
 app = Flask(__name__)
 app.config['MONGO_HOST'] = 'localhost'
 app.config['MONGO_PORT'] = '27017'
@@ -16,44 +27,51 @@ app.config["MONGO_URI"] = "mongodb://studentAdmin:longlivetheking@localhost:2701
 os.environ['FLASK_DEBUG'] = "1" # DO NOT USE IN PRODUCTION
 mongo = PyMongo(app)
 
-# returns a list of assignments that match the student token
+#Returns a list of assignments that match the student token
+#Currently WIP, use testdata for now
 @app.route('/<token>/assignments/')
 def getAssignments(token):
     return token
 
+#Gets the test assignment data for given student name
+#Name format should be: lastName%20firstName'%20gradyear
 @app.route('/get/testdata/<student_name>/', methods=['GET'])
 def get_data(student_name):
-    print(student_name)
-    #student_name = student_name.replace('%20', ' ')
-    get = mongo.db.data.find_one_or_404({"student_name": student_name})
-    get.pop('_id', None)
-    return jsonify(get)
+    get = mongo.db.data.find_one_or_404({"student_name": student_name}) #finds that instance of the student in the db, returns 404 if not found
+    get.pop('_id', None) #removes the id object, only needed for storage purposes
+    return jsonify(get) #encodes it into a JSON and returns it
 
+#Does the same as above, but fo schedule instead of assignments
 @app.route('/get/testsch/<student_name>/', methods=['GET'])
 def get_sch(student_name):
     get = mongo.db.sch.find_one_or_404({"student_name": student_name})
     get.pop('_id', None)
     return jsonify(get)
 
-# returns a list of classes that match the student token
+#Returns a list of classes that match the student token
+#Currently WIP
 @app.route('/<token>/classes/')
 def getClasses(token):
     return token
 
-# returns a schedule that matches the student token
+#Returns a schedule that matches the student token
+#Currenty WIP, use testsch for now
 @app.route('/<token>/schedule/')
 def getSchedule(token):
     return token
 
-# returns all current active announcements
+#Returns all current active announcements
+#Currently WIP, I have no idea when it will actually work
 @app.route('/announcements/')
 def getAnnouncements():
     return "Hello"
 
-# called when a valid token wants tp:
-# GET: See all their announcements that they have posted
-# POST: Update / Edit one of the announcements
-# PUT: Add a new announcement
+#Called when a valid token wants to post:
+#GET: See all their announcements that they have posted
+#POST: Update / Edit one of the announcements
+#PUT: Add a new announcement
+#Currently WIP, might never be implemented, who knows
+#TODO: this right here
 @app.route('/announcements/<token>/<value>', methods = ['GET', 'POST', 'PUT'])
 def announce(token, value):
     if request.method == 'GET':
@@ -63,45 +81,58 @@ def announce(token, value):
     else:
         addAnnouncement(token, value)
 
+#This is where the fun begins
+#This class stores the necessary information for an Assignment object that is used when parsing assignment data
+#Parameters: Name of Class, Type of Assignment, Name of Assignment, Date Assigned, Weekday Due
+#Used in parseAssignments func
 class Assignment:
     
-    def __init__(self, className, assType, assName,dateAss, weekdayDue):
+    def __init__(self, className, assType, assName,dateAss, weekdayDue): #just a good old init function
         self.className = className
         self.assType = assType
         self.assName = assName
         self.dateAss = dateAss
         self.weekdayDue = weekdayDue
 
-    def __str__(self):
+    def __str__(self): #probably not needed at this point
         return "Class: " + self.className + " , Type: " + self.assType + " , Name: " + self.assName + " , Assign Date: " + self.dateAss + " , Due Date: " + str(self.weekdayDue)
     
-    def toString(self):
+    def toString(self): #converts the data in the class to a usable string to post
         return self.className + ',,'+ self.assType + ',,' + self.assName + ',,' + self.dateAss + ',,' + str(self.weekdayDue)
 
+#Very similar to the Assignment class, but this time it stores an individual class for parsing schedule data
+#Parameters: Color, Name of Class, Name of Teacher, Room Number
 class Class:
 
-    def __init__(self, color, className, teacher, roomNum):
+    def __init__(self, color, className, teacher, roomNum):#init method
         self.color = color
         self.className = className
         self.teacher = teacher
         self.roomNum = roomNum
 
-    def toString(self):
+    def toString(self):#converts the data in the class to a usable string to post
         return self.color + ",," + self.className + ",," + self.teacher + ",," + self.roomNum
 
-
+#Route to call when there are new unparsed CSVs that needed to be turned into assignments
+#Doesn't return anything, so expect an error, but does a lot of work behind the scenes
+#TODO: make it delete the files
 @app.route('/testdata/parseass')
 def test():
-    print('made it here')
-    path = '/home/student/data/'
-    compileData(path, 'ass')
+    path = '/home/student/data/'#path at which the files are stored
+    compileData(path, 'ass')#calls compile method for ass, does the work, see below
     return None
 
+#Same as above but parses schedule files
+#Doesn't return anything, so expect an error, but does a lot of work behind the scenes
+#TODO: make it delete the files
 @app.route('/testdata/parsesch')
 def sche():
-    path = '/home/student/data/sch/'
-    compileData(path, 'sch')
+    path = '/home/student/data/sch/'#path at which the files are stored
+    compileData(path, 'sch')#calls compile method for sch, does the work, see below
     return None
+
+#All these 3 below are for announcements which are currently not implemented
+#TODO: All these things and more
 
 # Gets all announcements accessible from a token
 def getAnnouncementsFromToken(token):
@@ -115,16 +146,75 @@ def updateAnnouncement(token, value):
 def addAnnouncement(token, value):
     return None
 
-# return the letter dat based on the calendar day
+#Wow, this took way longer than I want to admit
+#This beast of a function returns a simple string (or int, prefence here), that represents the current letter day
+#Counts back to the first day of school, omits weekends and break days, and then gives you that beautiful value that corresponds to a letter betweeen A-F (0-7)
+#This is finished, DO NOT TOUCH unless you are changing start date or omit days
+@app.route('/get/letterday')
 def getDay():
-    return None
+    omit = [datetime.date(2018, 9, 10), datetime.date(2018, 9, 19), datetime.date(2018, 10, 8) #list of days to be omitted, i.e. winter & spring break, thanksgiving, etc.
+            , datetime.date(2018, 11, 12), datetime.date(2018, 11, 21), datetime.date(2018, 11, 22), datetime.date(2018, 11, 23)
+            , datetime.date(2018, 12, 24), datetime.date(2018, 12, 25), datetime.date(2018, 12, 26), datetime.date(2018, 12, 27), datetime.date(2018, 12, 28)
+            , datetime.date(2018, 12, 31), datetime.date(2019, 1, 1), datetime.date(2019, 1, 2), datetime.date(2019, 1, 3), datetime.date(2019, 1, 4)
+            , datetime.date(2019, 1, 21), datetime.date(2019, 2, 14), datetime.date(2019, 2, 15), datetime.date(2019, 2, 18)
+            , datetime.date(2019, 3, 11), datetime.date(2019, 3, 12), datetime.date(2019, 3, 13), datetime.date(2019, 3, 14), datetime.date(2019, 3, 15)
+            , datetime.date(2019, 3, 18), datetime.date(2019, 3, 19), datetime.date(2019, 3, 20), datetime.date(2019, 3, 21), datetime.date(2019, 3, 22)
+            , datetime.date(2019, 4, 19), datetime.date(2019, 5, 27)]
 
-# reHashes a token back into a student ID
+    startDate = datetime.date(2018, 9, 6) #first day of school, first A day of the year, the day to count back to
+
+    now = datetime.datetime.now() #sets the current date
+
+    deltaDays = now.date() - startDate #finds the delta(change) in days between now and the start date
+    days = deltaDays.days #converts the delta into a nice int value
+
+    weekends = days/7.0 #divides the amount of days by 7 to get the amount of weekends
+
+    weekends = round(weekends) #if something breaks, it's one of the rounding lines, this is here only because it fixes counting errors
+
+    days -= 2*weekends #subtracts 2 days per each weekend calculated, because there is no school on weekends
+
+    for d in omit: #for each omitted day that has passed(delta day is greater than zero), it subtracts one day
+        if (now.date()-d).days >= 0:
+            days -= 1
+
+    days = round(days) #see above, this will be the death of me
+
+    days += 1 #adds one day, I don't even think God knows why this in needed, but it makes everything work
+
+    letterNum = days % 8 #gets the remainder when divided by 8, because the schedule works on an 8 day rotation
+
+    letter = int(letterNum) #converts from double to int, this is needed for the if statements
+    letterDay = ""
+    #converts corresponding number to letter, starting at 0=A and endingat 7=H
+    if(letter == 0):
+        letterDay = "A"
+    if(letter == 1):
+        letterDay = "B"
+    if(letter == 2):
+        letterDay = "C"
+    if(letter == 3):
+        letterDay = "D"
+    if(letter == 4):
+        letterDay = "E"
+    if(letter == 5):
+        letterDay = "F"
+    if(letter == 6):
+        letterDay = "G"
+    if(letter == 7):
+        letterDay = "H"
+
+    return letterDay #returns the letter day of today
+
+#ReHashes a token back into a student ID
+#I am not looking forward to inplementing this, I may never, who knows
+#TODO: hopefully not this
 def getIDFromToken(token):
     return token
 
-# literally just declaring a bunch of variables fo use in the future
-# if you enjoy the names, thank you, I did too, "assignments" have a conveniently fun abbreviation
+#Literally just declaring a bunch of variables foR use in the future
+#If you enjoy the names, thank you, I did too, "assignments" have a conveniently fun abbreviation
+#Stores assignements data some nested arrays
 sunAss = []
 monAss = []
 tueAss = []
@@ -134,6 +224,7 @@ friAss = []
 satAss = []
 assForDay = [sunAss, monAss, tueAss, wedAss, thuAss, friAss, satAss]
 
+#Similar to above, stores schedule data in nested arrays
 aSch = []
 bSch = []
 cSch = []
@@ -144,7 +235,9 @@ gSch= []
 hSch = []
 schedule = [aSch, bSch, cSch, dSch, eSch, fSch, gSch, hSch]
 
-# compiles data, may or may not be needed
+#The Big Daddy of all fun data compiling methods
+#Takes in the path of the folder, and the type of data in the folder, then eats it all up and spits it out into the MongoDB
+#Type can either be "ass" for assignments or "sch" for schedules
 def compileData(path, type):
     if type == "sch":
         name = ""
