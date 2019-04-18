@@ -68,18 +68,16 @@ def getAnnouncements():
 
 #Called when a valid token wants to post:
 #GET: See all their announcements that they have posted
-#POST: Update / Edit one of the announcements
-#PUT: Add a new announcement
+#POST: Post a new announcement
 #Currently WIP, might never be implemented, who knows
 #TODO: this right here
-@app.route('/announcements/<token>/<value>', methods = ['GET', 'POST', 'PUT'])
+@app.route('/announcements/<token>/<value>', methods = ['GET', 'POST'])
 def announce(token, value):
     if request.method == 'GET':
        getAnnouncementsFromToken(token)
-    if request.method == 'POST':
-        updateAnnouncement(token, value)
     else:
-        addAnnouncement(token, value)
+        post_data = request.get_json()
+        addAnnouncement(token, post_data)
 
 #This is where the fun begins
 #This class stores the necessary information for an Assignment object that is used when parsing assignment data
@@ -143,8 +141,13 @@ def updateAnnouncement(token, value):
     return None
 
 # adds a new announcements, given token for credentials and value for data
-def addAnnouncement(token, value):
-    return None
+def addAnnouncement(token, post_data):
+    annType = post_data['type']
+    author = post_data['author']
+    title = post_data['title']
+    time = post_data['datetime']
+    body = post_data['body']
+
 
 #Wow, this took way longer than I want to admit
 #This beast of a function returns a simple string (or int, prefence here), that represents the current letter day
@@ -239,22 +242,24 @@ schedule = [aSch, bSch, cSch, dSch, eSch, fSch, gSch, hSch]
 #Takes in the path of the folder, and the type of data in the folder, then eats it all up and spits it out into the MongoDB
 #Type can either be "ass" for assignments or "sch" for schedules
 def compileData(path, type):
-    if type == "sch":
+    if type == "sch": #if you're dealing with a schedule
         name = ""
-        for a in schedule:
+        for a in schedule: #clears the list that stores the data
                 del a[:]
-        for filename in os.listdir(path):
-            with open(path + filename) as csv_file:
-                csv_reader = csv.reader(csv_file, delimiter=',')
+        for filename in os.listdir(path): #goes through each file in the folder
+            with open(path + filename) as csv_file: #opens the csvs
+                csv_reader = csv.reader(csv_file, delimiter=',') #creates the csv reader
+                #V A R I A B L E S
                 line_count = 0
                 start_index = 0
                 working_row = ""
                 finished = 0
-                for row in csv_reader:
+                for row in csv_reader: #goes through each row
+                    #So basically there's a tiny issue where csv's are read differently on the server than they are here
+                    #All of the lines are followed by blanks lines when run remotely, so that means we only read the lines that are even numbered
+                    #It is embarrasing to say that I spent way too much time on this stuff before I realized the error
                     if line_count % 2 == 0:
-                        print("here")
-                        print(row)
-                        if line_count == 2:
+                        if line_count == 2: #figures out the first letter day shown
                             if row[1] == "A\n":
                                 start_index = 0
                             if row[1] == "B\n":
@@ -271,51 +276,55 @@ def compileData(path, type):
                                 start_index = 6
                             if row[1] == "H\n":
                                 start_index = 7
-                            working_row = row[1]
-                            print(start_index)
+                            working_row = row[1] #sets the first working row
+                            #All of the following code, up till break, has to do with switching the working row
+                            #It's pretty self explanatory
                         if line_count >= 2 and row[1] != working_row:
-                            #print("Working Row: " + working_row)
                             start_index += 1
                             if start_index == 8:
                                 start_index = 0
                             working_row = row[1]
-                            #print(start_index)
                             finished += 1
                         if finished == 8:
                             break
-                        if line_count >= 2 and row[8] != "Attendance":
+                        if line_count >= 2 and row[8] != "Attendance": #sets the name
                             if name == "":
                                 name = row[3]
-                            schedule[start_index].append(parseClass(row))
+                            schedule[start_index].append(parseClass(row)) #parses that beautiful data, see parseClass method
                     line_count += 1
+                #This creates the post that uploads the schedule to the server
+                #The "schedule is organized as an array of arrays"
+                #Each subarray corresponds to a letter day (indexes 0-7)
+                #Each subarray contains "Class" object strings that hold all the data we need
                 post = {
-                    "student_name": name,
-                    "schedule": schedule
+                    "student_name": name, #string for student name
+                    "schedule": schedule #array of arrays for classes
                 }
-                posts = mongo.db.sch
+                posts = mongo.db.sch #uploads to "sch"
                 posts.insert_one(post)
-    if type == "ass":
+
+    if type == "ass": #if you're dealing with assignments
+        #V A R I A B L E S
         name = ""
         numAss = 0
         week = ""
         
         for filename in os.listdir(path):
             print(filename)
-            for a in assForDay:
+            for a in assForDay:#clears array for fun and good stuff
                 del a[:]
-            # now this is where the magic happens
-            # if you don't understand how this works, just google it, using the python "csv" library
+            #Now this is where the magic happens
+            #If you don't understand how this works, just google it, using the python "csv" library
             with open(path + filename) as csv_file:
                 print("im here")
                 csv_reader = csv.reader(csv_file, delimiter=',')
                 line_count = 0
-                for row in csv_reader:
-                    print(str(line_count) + ": " + str(row))
-                # first row, splitting it into an array of strings and pulling out the week because I'm too lazy to use substring
+                for row in csv_reader:#goes through each row
+                #First row, splitting it into an array of strings and pulling out the week because I'm too lazy to use substring
                     if line_count == 0:
                         splitStr = row[0].split()
                         week = splitStr[8]
-                # third row, holds the student name in there somewhere, pulling it out for future use
+                #Third row, holds the student name in there somewhere, pulling it out for future use
                     if line_count == 4:
                         name = row[0]
                 # fourth row is the fun part, this has all the assingments held in it
@@ -328,7 +337,7 @@ def compileData(path, type):
                         for index in row:
                             arr = index.split("\n")
                             if len(arr) > 1:
-                                parseAssignments(0, arr.index('', 4), arr, day)
+                                parseAssignments(0, arr.index('', 4), arr, day) #parses, but assignments this time. See the method for more details
                             day += 1
                 #else:
                     #print(row)
@@ -343,12 +352,13 @@ def compileData(path, type):
             post = {
                 "student_name": name,
                 "date": week,
-                "number_of_assignments": numAss,
-                "assignmnets": assForDay
+                "number_of_assignments": numAss,# doesn't work right now because I'm lazy
+                "assignments": assForDay
             }
-            posts = mongo.db.data
+            posts = mongo.db.data #uploads to "data"
             posts.insert_one(post)
 
+#I really don't wanna explain this one, it's pretty self explanatory if you look at it
 def parseAssignments(startIndex, endIndex, arr, day):
     lenSect = endIndex - startIndex
     if lenSect < 5:
@@ -364,7 +374,7 @@ def parseAssignments(startIndex, endIndex, arr, day):
 
 def parseClass(row):
     #getting color
-    if row[8] != "Yellow":
+    if row[8] != "Yellow": #for some reason yellow period is not working well, so I'm making a fun exception
         tempColor = row[8][:row[8].find(" ")]
     else:
         tempColor = row[8]
