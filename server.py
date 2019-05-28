@@ -2,9 +2,12 @@ import os
 import csv
 import datetime
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, flash, render_template
 from flask import request
 from flask_pymongo import PyMongo
+
+
+#from endpoints.assignments import assignments_page
 
 #The absolute motherload of code, the big kahuna, the behemoth
 #MyKingApp backend dataserver
@@ -25,7 +28,10 @@ app.config['MONGO_PASSWORD'] = 'longlivetheking'
 app.config['MONGO_AUTH_SOURCE'] = 'admin'
 app.config["MONGO_URI"] = "mongodb://studentAdmin:longlivetheking@localhost:27017/test_king?authSource=admin"
 os.environ['FLASK_DEBUG'] = "1" # DO NOT USE IN PRODUCTION
+
 mongo = PyMongo(app)
+
+#app.register_blueprint(assignments_page, url_prefix='/assignments')
 
 #Returns a list of assignments that match the student token
 #Currently WIP, use testdata for now
@@ -71,13 +77,13 @@ def getAnnouncements():
 #POST: Post a new announcement
 #Currently WIP, might never be implemented, who knows
 #TODO: this right here
-@app.route('/announcements/<token>/<value>', methods = ['GET', 'POST'])
-def announce(token, value):
+@app.route('/announcements/<token>/', methods = ['GET', 'POST'])
+def announce(token):
     if request.method == 'GET':
        getAnnouncementsFromToken(token)
     else:
-        post_data = request.get_json()
-        addAnnouncement(token, post_data)
+        json_data = request.form
+        return addAnnouncement(token, json_data)
 
 #This is where the fun begins
 #This class stores the necessary information for an Assignment object that is used when parsing assignment data
@@ -140,21 +146,125 @@ def getAnnouncementsFromToken(token):
 def updateAnnouncement(token, value):
     return None
 
+validPosters = ["Heaton", "Creveling"]
+
+@app.route('/announcements/webapp')
+def annWeb():
+    return render_template('inputAnn.html')
+
+@app.route('/announcements/webapp/result', methods = ['POST', 'GET'])
+def annWebResult():
+    if request.method == 'POST':
+        json_data = request.form
+        return addAnnouncement('web_app_token', json_data)
+
 # adds a new announcements, given token for credentials and value for data
-def addAnnouncement(token, post_data):
-    annType = post_data['type']
-    author = post_data['author']
-    title = post_data['title']
-    time = post_data['datetime']
-    body = post_data['body']
+def addAnnouncement(token, json_data):
+    print(json_data)
+    annType = json_data.get('type')
+    author = json_data.get('author')
+    title = json_data.get('title')
+    time = json_data.get('datetime')
+    body = json_data.get('body')
+
+    if(token == 'web_app_token'):
+        token = json_data.get('token')
+
+    try:
+        poster = validPosters.index(token)
+
+        print(str(poster))
+
+        post = {
+            "poster": poster,
+            "type": annType,
+            "author": author,
+            "time": time,
+            "title": title,
+            "body": body
+        }
+
+        posts = mongo.db.ann
+        posts.insert_one(post)
+
+        return "done"
+    except ValueError:
+        return "invalid_poster_token"
 
 
+@app.route('/get/letterday/webapp/')
+def getDayApp():
+    return render_template('inputDay.html')
+
+@app.route('/get/letterday/webapp/result', methods = ['POST', 'GET'])
+def getDayAppResult():
+    if request.method == 'POST':
+        form_data = request.form
+        month = int(form_data.get('Month'))
+        day = int(form_data.get('Day'))
+        year = int(form_data.get('Year'))
+
+        omit = [datetime.date(2018, 9, 10), datetime.date(2018, 9, 19), datetime.date(2018, 10, 8) #list of days to be omitted, i.e. winter & spring break, thanksgiving, etc.
+            , datetime.date(2018, 11, 12), datetime.date(2018, 11, 21), datetime.date(2018, 11, 22), datetime.date(2018, 11, 23)
+            , datetime.date(2018, 12, 24), datetime.date(2018, 12, 25), datetime.date(2018, 12, 26), datetime.date(2018, 12, 27), datetime.date(2018, 12, 28)
+            , datetime.date(2018, 12, 31), datetime.date(2019, 1, 1), datetime.date(2019, 1, 2), datetime.date(2019, 1, 3), datetime.date(2019, 1, 4)
+            , datetime.date(2019, 1, 21), datetime.date(2019, 2, 14), datetime.date(2019, 2, 15), datetime.date(2019, 2, 18)
+            , datetime.date(2019, 3, 11), datetime.date(2019, 3, 12), datetime.date(2019, 3, 13), datetime.date(2019, 3, 14), datetime.date(2019, 3, 15)
+            , datetime.date(2019, 3, 18), datetime.date(2019, 3, 19), datetime.date(2019, 3, 20), datetime.date(2019, 3, 21), datetime.date(2019, 3, 22)
+            , datetime.date(2019, 4, 19), datetime.date(2019, 5, 27)]
+
+        startDate = datetime.date(2018, 9, 6) #first day of school, first A day of the year, the day to count back to
+
+        now = datetime.date(year, month, day) #sets the current date
+
+        deltaDays = now - startDate #finds the delta(change) in days between now and the start date
+        days = deltaDays.days #converts the delta into a nice int value
+
+        weekends = days/7.0 #divides the amount of days by 7 to get the amount of weekends
+
+        weekends = round(weekends) #if something breaks, it's one of the rounding lines, this is here only because it fixes counting errors
+
+        days -= 2*weekends #subtracts 2 days per each weekend calculated, because there is no school on weekends
+
+        for d in omit: #for each omitted day that has passed(delta day is greater than zero), it subtracts one day
+            if (now-d).days >= 0:
+                days -= 1
+
+        days = round(days) #see above, this will be the death of me
+
+        days += 1 #adds one day, I don't even think God knows why this in needed, but it makes everything work
+
+        letterNum = days % 8 #gets the remainder when divided by 8, because the schedule works on an 8 day rotation
+
+        letter = int(letterNum) #converts from double to int, this is needed for the if statements
+        letterDay = ""
+        #converts corresponding number to letter, starting at 0=A and endingat 7=H
+        if(letter == 0):
+            letterDay = "A"
+        if(letter == 1):
+            letterDay = "B"
+        if(letter == 2):
+            letterDay = "C"
+        if(letter == 3):
+            letterDay = "D"
+        if(letter == 4):
+            letterDay = "E"
+        if(letter == 5):
+            letterDay = "F"
+        if(letter == 6):
+            letterDay = "G"
+        if(letter == 7):
+            letterDay = "H"
+
+        return letterDay #returns the letter day of today
 #Wow, this took way longer than I want to admit
 #This beast of a function returns a simple string (or int, prefence here), that represents the current letter day
 #Counts back to the first day of school, omits weekends and break days, and then gives you that beautiful value that corresponds to a letter betweeen A-F (0-7)
 #This is finished, DO NOT TOUCH unless you are changing start date or omit days
-@app.route('/get/letterday')
+@app.route('/get/letterday/', methods = ["GET"])
 def getDay():
+    letterDay = ""
+
     omit = [datetime.date(2018, 9, 10), datetime.date(2018, 9, 19), datetime.date(2018, 10, 8) #list of days to be omitted, i.e. winter & spring break, thanksgiving, etc.
             , datetime.date(2018, 11, 12), datetime.date(2018, 11, 21), datetime.date(2018, 11, 22), datetime.date(2018, 11, 23)
             , datetime.date(2018, 12, 24), datetime.date(2018, 12, 25), datetime.date(2018, 12, 26), datetime.date(2018, 12, 27), datetime.date(2018, 12, 28)
@@ -168,46 +278,52 @@ def getDay():
 
     now = datetime.datetime.now() #sets the current date
 
-    deltaDays = now.date() - startDate #finds the delta(change) in days between now and the start date
-    days = deltaDays.days #converts the delta into a nice int value
+    if(now.weekday() == 5 or now.weekday() == 6):
+        letterDay = "W"
+    else:
+        deltaDays = now.date() - startDate #finds the delta(change) in days between now and the start date
+        days = deltaDays.days #converts the delta into a nice int value
 
-    weekends = days/7.0 #divides the amount of days by 7 to get the amount of weekends
+        weekends = days/7.0 #divides the amount of days by 7 to get the amount of weekends
 
-    weekends = round(weekends) #if something breaks, it's one of the rounding lines, this is here only because it fixes counting errors
+        weekends = round(weekends) #if something breaks, it's one of the rounding lines, this is here only because it fixes counting errors
 
-    days -= 2*weekends #subtracts 2 days per each weekend calculated, because there is no school on weekends
+        days -= 2*weekends #subtracts 2 days per each weekend calculated, because there is no school on weekends
 
-    for d in omit: #for each omitted day that has passed(delta day is greater than zero), it subtracts one day
-        if (now.date()-d).days >= 0:
-            days -= 1
+        for d in omit: #for each omitted day that has passed(delta day is greater than zero), it subtracts one day
+            if (now.date()-d).days >= 0:
+                days -= 1
 
-    days = round(days) #see above, this will be the death of me
+        days = round(days) #see above, this will be the death of me
 
-    days += 1 #adds one day, I don't even think God knows why this in needed, but it makes everything work
+        days += 1 #adds one day, I don't even think God knows why this in needed, but it makes everything work
 
-    letterNum = days % 8 #gets the remainder when divided by 8, because the schedule works on an 8 day rotation
+        letterNum = days % 8 #gets the remainder when divided by 8, because the schedule works on an 8 day rotation
 
-    letter = int(letterNum) #converts from double to int, this is needed for the if statements
-    letterDay = ""
-    #converts corresponding number to letter, starting at 0=A and endingat 7=H
-    if(letter == 0):
-        letterDay = "A"
-    if(letter == 1):
-        letterDay = "B"
-    if(letter == 2):
-        letterDay = "C"
-    if(letter == 3):
-        letterDay = "D"
-    if(letter == 4):
-        letterDay = "E"
-    if(letter == 5):
-        letterDay = "F"
-    if(letter == 6):
-        letterDay = "G"
-    if(letter == 7):
-        letterDay = "H"
+        letter = int(letterNum) #converts from double to int, this is needed for the if statements
+        #converts corresponding number to letter, starting at 0=A and endingat 7=H
+        if(letter == 0):
+            letterDay = "A"
+        if(letter == 1):
+            letterDay = "B"
+        if(letter == 2):
+            letterDay = "C"
+        if(letter == 3):
+            letterDay = "D"
+        if(letter == 4):
+            letterDay = "E"
+        if(letter == 5):
+            letterDay = "F"
+        if(letter == 6):
+            letterDay = "G"
+        if(letter == 7):
+            letterDay = "H"
 
-    return letterDay #returns the letter day of today
+    output = {
+        "letter": letterDay
+    } 
+    
+    return jsonify(output) #returns the letter day of today
 
 #ReHashes a token back into a student ID
 #I am not looking forward to inplementing this, I may never, who knows
@@ -236,6 +352,7 @@ eSch = []
 fSch = []
 gSch= []
 hSch = []
+lunchTimes = [True, True, True, True, True, True, True, True]
 schedule = [aSch, bSch, cSch, dSch, eSch, fSch, gSch, hSch]
 
 #The Big Daddy of all fun data compiling methods
@@ -243,10 +360,11 @@ schedule = [aSch, bSch, cSch, dSch, eSch, fSch, gSch, hSch]
 #Type can either be "ass" for assignments or "sch" for schedules
 def compileData(path, type):
     if type == "sch": #if you're dealing with a schedule
-        name = ""
-        for a in schedule: #clears the list that stores the data
-                del a[:]
         for filename in os.listdir(path): #goes through each file in the folder
+            for a in schedule: #clears the list that stores the data
+                del a[:]
+            name = ""
+            lunchTimes = [True, True, True, True, True, True, True, True]
             with open(path + filename) as csv_file: #opens the csvs
                 csv_reader = csv.reader(csv_file, delimiter=',') #creates the csv reader
                 #V A R I A B L E S
@@ -290,7 +408,10 @@ def compileData(path, type):
                         if line_count >= 2 and row[8] != "Attendance": #sets the name
                             if name == "":
                                 name = row[3]
+                            print(row[5])
                             schedule[start_index].append(parseClass(row)) #parses that beautiful data, see parseClass method
+                            if row[5] == "11:30 AM" or row[5] == "12:00 PM":
+                                lunchTimes[start_index] = isFirstLunch(row)
                     line_count += 1
                 #This creates the post that uploads the schedule to the server
                 #The "schedule is organized as an array of arrays"
@@ -298,7 +419,8 @@ def compileData(path, type):
                 #Each subarray contains "Class" object strings that hold all the data we need
                 post = {
                     "student_name": name, #string for student name
-                    "schedule": schedule #array of arrays for classes
+                    "schedule": schedule, #array of arrays for classes
+                    "isFirstLunch": lunchTimes
                 }
                 posts = mongo.db.sch #uploads to "sch"
                 posts.insert_one(post)
@@ -387,6 +509,11 @@ def parseClass(row):
     #making object and inserting into array
     newClass = Class(tempColor, tempName, tempTeach, tempNum)
     return newClass.toString()
+
+def isFirstLunch(row):
+    if row[5] == "11:30 AM":
+        return False
+    return True
 
 if __name__ == '__main__':
     app.run()
